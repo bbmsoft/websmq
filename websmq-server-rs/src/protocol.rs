@@ -30,7 +30,7 @@ pub enum Message {
     LastWill(Topic, Payload),
 }
 
-pub fn parse_message(buffer: &[u8]) -> ProtocolResult<Message> {
+pub fn deserialize_message(buffer: &[u8]) -> ProtocolResult<Message> {
     let topic = get_topic(buffer)?;
     let payload = get_payload(buffer)?;
     let type_byte = &buffer[0];
@@ -42,6 +42,26 @@ pub fn parse_message(buffer: &[u8]) -> ProtocolResult<Message> {
         0b11 => Ok(Message::LastWill(topic, payload)),
         _ => panic!("the compiler does not know, but this pattern IS exhaustive"),
     }
+}
+
+pub fn serialize_message(msg: &Message) -> Vec<u8> {
+    match msg {
+        Message::Publish(topic, payload) => encode_message(0b00, topic, Some(payload.to_owned())),
+        Message::Subscribe(topic) => encode_message(0b01, topic, None),
+        Message::Unsubscribe(topic) => encode_message(0b10, topic, None),
+        Message::LastWill(topic, payload) => encode_message(0b11, topic, Some(payload.to_owned())),
+    }
+}
+
+fn encode_message(message_type: u16, topic: &str, mut payload: Option<Vec<u8>>) -> Vec<u8> {
+    let mut topic = topic.as_bytes().to_owned();
+    let header = message_type << 14 | topic.len() as u16;
+    let mut out = vec![(header >> 8) as u8, header as u8];
+    out.append(&mut topic);
+    if let Some(mut payload) = payload.as_mut() {
+        out.append(&mut payload);
+    }
+    out
 }
 
 pub fn get_topic_length(buffer: &[u8]) -> u16 {
@@ -85,12 +105,21 @@ pub fn get_payload(buffer: &[u8]) -> ProtocolResult<Vec<u8>> {
 mod test {
     use super::*;
 
+    const PUBLISH_WORLD_TO_HELLO: [u8; 12] = [
+        0b00000000, 0b00000101, 0b01101000, 0b01100101, 0b01101100, 0b01101100, 0b01101111,
+        0b01110111, 0b01101111, 0b01110010, 0b01101100, 0b01100100,
+    ];
+
     const SUBSCRIBE_TO_HELLO: [u8; 7] = [
         0b01000000, 0b00000101, 0b01101000, 0b01100101, 0b01101100, 0b01101100, 0b01101111,
     ];
 
-    const PUBLISH_WORLD_TO_HELLO: [u8; 12] = [
-        0b00000000, 0b00000101, 0b01101000, 0b01100101, 0b01101100, 0b01101100, 0b01101111,
+    const UNSUBSCRIBE_FROM_HELLO: [u8; 7] = [
+        0b10000000, 0b00000101, 0b01101000, 0b01100101, 0b01101100, 0b01101100, 0b01101111,
+    ];
+
+    const LAST_WILL_WORLD_TO_HELLO: [u8; 12] = [
+        0b11000000, 0b00000101, 0b01101000, 0b01100101, 0b01101100, 0b01101100, 0b01101111,
         0b01110111, 0b01101111, 0b01110010, 0b01101100, 0b01100100,
     ];
 
@@ -105,13 +134,20 @@ mod test {
     #[test]
     fn test_parse_message() {
         assert_eq!(
-            parse_message(&SUBSCRIBE_TO_HELLO).unwrap(),
+            deserialize_message(&PUBLISH_WORLD_TO_HELLO).unwrap(),
+            Message::Publish("hello".to_owned(), "world".as_bytes().to_owned())
+        );
+        assert_eq!(
+            deserialize_message(&SUBSCRIBE_TO_HELLO).unwrap(),
             Message::Subscribe("hello".to_owned())
         );
-
         assert_eq!(
-            parse_message(&PUBLISH_WORLD_TO_HELLO).unwrap(),
-            Message::Publish("hello".to_owned(), "world".as_bytes().to_owned())
+            deserialize_message(&UNSUBSCRIBE_FROM_HELLO).unwrap(),
+            Message::Unsubscribe("hello".to_owned())
+        );
+        assert_eq!(
+            deserialize_message(&LAST_WILL_WORLD_TO_HELLO).unwrap(),
+            Message::LastWill("hello".to_owned(), "world".as_bytes().to_owned())
         );
     }
 
@@ -126,5 +162,40 @@ mod test {
         assert_eq!(String::from_utf8(payload).unwrap(), "");
         let payload = get_payload(&PUBLISH_WORLD_TO_HELLO).unwrap();
         assert_eq!(String::from_utf8(payload).unwrap(), "world");
+    }
+
+    #[test]
+    fn test_encode_header_and_topic() {
+        assert_eq!(encode_message(0b01, "hello", None), SUBSCRIBE_TO_HELLO);
+        assert_eq!(
+            encode_message(0b00, "hello", Some("world".as_bytes().to_owned())),
+            PUBLISH_WORLD_TO_HELLO
+        );
+    }
+
+    #[test]
+    fn test_serialize_message() {
+        assert_eq!(
+            serialize_message(&Message::Publish(
+                "hello".to_owned(),
+                "world".as_bytes().to_owned()
+            )),
+            PUBLISH_WORLD_TO_HELLO
+        );
+        assert_eq!(
+            serialize_message(&Message::Subscribe("hello".to_owned())),
+            SUBSCRIBE_TO_HELLO
+        );
+        assert_eq!(
+            serialize_message(&Message::Unsubscribe("hello".to_owned())),
+            UNSUBSCRIBE_FROM_HELLO
+        );
+        assert_eq!(
+            serialize_message(&Message::LastWill(
+                "hello".to_owned(),
+                "world".as_bytes().to_owned()
+            )),
+            LAST_WILL_WORLD_TO_HELLO
+        );
     }
 }
