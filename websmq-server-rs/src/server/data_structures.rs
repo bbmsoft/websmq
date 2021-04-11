@@ -46,7 +46,7 @@ where
     }
 
     pub fn remove_client(&mut self, path: &[String], client: &T) -> bool {
-        let removed = if let Some(clients) = self.get_clients_at_path(&path) {
+        let removed = if let Some(clients) = self.get_mut_clients_at_path(&path) {
             let removed = clients.remove(client);
             removed
         } else {
@@ -59,16 +59,19 @@ where
         removed
     }
 
-    fn get_or_create_clients_at_path(&mut self, path: &[String]) -> &mut HashSet<T> {
-        let mut current = &mut self.root;
-        for element in path {
-            current = current.get_or_create_child(element);
+    pub fn get_matching_clients(&self, path: &[String]) -> Vec<&T> {
+        let mut out = Vec::new();
+        if let Some(clients_at_path) = self.get_clients_at_path(path) {
+            for client in clients_at_path.iter() {
+                out.push(client);
+            }
         }
-        &mut current.clients
+        // TODO add clients with matching wildcard subscriptions
+        out
     }
 
-    fn get_node_at_path(&mut self, path: &[String]) -> Option<&mut TreeNode<T>> {
-        let mut current = Some(&mut self.root);
+    fn get_node_at_path(&self, path: &[String]) -> Option<&TreeNode<T>> {
+        let mut current = Some(&self.root);
         for element in path {
             match current {
                 Some(node) => current = node.get_child(element),
@@ -78,8 +81,32 @@ where
         current
     }
 
-    fn get_clients_at_path(&mut self, path: &[String]) -> Option<&mut HashSet<T>> {
+    fn get_mut_node_at_path(&mut self, path: &[String]) -> Option<&mut TreeNode<T>> {
+        let mut current = Some(&mut self.root);
+        for element in path {
+            match current {
+                Some(node) => current = node.get_mut_child(element),
+                None => return None,
+            }
+        }
+        current
+    }
+
+    fn get_or_create_clients_at_path(&mut self, path: &[String]) -> &mut HashSet<T> {
+        let mut current = &mut self.root;
+        for element in path {
+            current = current.get_or_create_child(element);
+        }
+        &mut current.clients
+    }
+
+    fn get_clients_at_path(&self, path: &[String]) -> Option<&HashSet<T>> {
         let node = self.get_node_at_path(path);
+        node.map(|node| &node.clients)
+    }
+
+    fn get_mut_clients_at_path(&mut self, path: &[String]) -> Option<&mut HashSet<T>> {
+        let node = self.get_mut_node_at_path(path);
         node.map(|node| &mut node.clients)
     }
 
@@ -88,7 +115,7 @@ where
             // can't clean up the root node
             return;
         }
-        if let Some(node) = self.get_node_at_path(path) {
+        if let Some(node) = self.get_mut_node_at_path(path) {
             if node.clients.is_empty() && node.children.is_empty() {
                 self.remove_node(path);
             }
@@ -104,7 +131,7 @@ where
         let last = path.len() - 1;
         let parent_path = &path[..last];
         let node_name = &path[last];
-        if let Some(parent) = self.get_node_at_path(parent_path) {
+        if let Some(parent) = self.get_mut_node_at_path(parent_path) {
             parent.children.remove(node_name);
         }
     }
@@ -132,7 +159,11 @@ where
         }
     }
 
-    fn get_child(&mut self, path_segment: &str) -> Option<&mut TreeNode<T>> {
+    fn get_child(&self, path_segment: &str) -> Option<&TreeNode<T>> {
+        self.children.get(path_segment)
+    }
+
+    fn get_mut_child(&mut self, path_segment: &str) -> Option<&mut TreeNode<T>> {
         self.children.get_mut(path_segment)
     }
 
@@ -144,7 +175,7 @@ where
         } else {
             let child = TreeNode::with_name(path_segment.to_owned());
             self.children.insert(path_segment.to_owned(), child);
-            self.get_child(path_segment)
+            self.get_mut_child(path_segment)
                 .expect("cannot be None, we just inserted it")
         }
     }
@@ -237,7 +268,7 @@ mod test {
         assert_eq!(tree.len(), 2);
 
         let clients = tree
-            .get_clients_at_path(&vec![
+            .get_mut_clients_at_path(&vec![
                 "temps".to_owned(),
                 "home".to_owned(),
                 "kitchen".to_owned(),

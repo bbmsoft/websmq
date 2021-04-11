@@ -822,6 +822,7 @@ dependencies = [
  "tokio",
  "tokio-tungstenite",
  "tungstenite",
+ "url",
 ]
 
 [[package]]

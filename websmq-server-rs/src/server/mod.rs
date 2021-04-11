@@ -9,9 +9,10 @@ use log::*;
 use std::{
     collections::{HashMap, HashSet},
     hash::Hash,
+    io::Result,
     net::SocketAddr,
+    sync::Arc,
 };
-use std::{io::Result, sync::Arc};
 use tokio::{
     net::{TcpListener, TcpStream, ToSocketAddrs},
     sync::{
@@ -97,11 +98,19 @@ impl ClientRegistry {
         }
     }
 
-    async fn publish(&mut self, client: Client, topic: String, payload: Vec<u8>) {
-        // TODO
+    async fn publish(&mut self, _client: Client, topic: String, payload: Vec<u8>) {
+        let path: Vec<String> = topic.split("/").map(|s| s.to_owned()).collect();
+        let clients = self.subscriptions.get_matching_clients(&path);
+        for client in clients {
+            let msg = Message::Publish(topic.clone(), payload.clone());
+            if let Err(e) = client.sender.send(msg).await {
+                error!("Error sending message to client: {}", e);
+            }
+        }
     }
 
     async fn subscribe(&mut self, client: Client, topic: String) {
+        info!("Subscribing client {:?} to topic '{}'", client, topic);
         // TODO check if this topic is already covered by a wildcard topic
         let subscribed_topics = self.clients.get_mut(&client);
         let subscription_added = if let Some(topics) = subscribed_topics {
@@ -119,7 +128,14 @@ impl ClientRegistry {
     }
 
     async fn unsubscribe(&mut self, client: Client, topic: String) {
-        // TODO
+        if let Some(topics) = self.clients.get_mut(&client) {
+            topics.remove(&topic);
+            if topics.is_empty() {
+                self.clients.remove(&client);
+            }
+        }
+        let path: Vec<String> = topic.split("/").map(|s| s.to_owned()).collect();
+        self.subscriptions.remove_client(&path, &client);
     }
 
     async fn register_last_will(&mut self, client: Client, topic: String, payload: Vec<u8>) {
@@ -194,6 +210,7 @@ async fn forward_messages_to_client(
     while let Some(msg) = rx.recv().await {
         let data = serialize_message(&msg);
         let ws_message = tokio_tungstenite::tungstenite::Message::Binary(data);
+        // TODO should this be optimized to not flush after each message?
         if let Err(e) = write.send(ws_message).await {
             error!("Error sending message to client: {}", e);
             break;
