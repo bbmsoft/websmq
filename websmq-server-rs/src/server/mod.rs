@@ -75,7 +75,7 @@ impl ClientRegistry {
             }
             tungstenite::Message::Close(reason) => {
                 info!("Received close message: {:?}", reason);
-                // TODO
+                self.remove_client(client);
             }
         }
     }
@@ -101,11 +101,16 @@ impl ClientRegistry {
     async fn publish(&mut self, _client: Client, topic: String, payload: Vec<u8>) {
         let path: Vec<String> = topic.split("/").map(|s| s.to_owned()).collect();
         let clients = self.subscriptions.get_matching_clients(&path);
+        let mut offline_clients = Vec::new();
         for client in clients {
             let msg = Message::Publish(topic.clone(), payload.clone());
             if let Err(e) = client.sender.send(msg).await {
                 error!("Error sending message to client: {}", e);
+                offline_clients.push(client.clone());
             }
+        }
+        for client in offline_clients {
+            self.remove_client(client);
         }
     }
 
@@ -144,6 +149,19 @@ impl ClientRegistry {
 
     async fn send_last_will(&mut self, client: Client) {
         // TODO
+    }
+
+    fn remove_client(&mut self, client: Client) {
+        if let Some(topics) = self.clients.remove(&client) {
+            for topic in topics {
+                let path: Vec<String> = topic.split("/").map(|s| s.to_owned()).collect();
+                self.subscriptions.remove_client(&path, &client);
+                info!(
+                    "Unsubscribing client {} from topic '{}'",
+                    client.addr, topic
+                );
+            }
+        }
     }
 }
 
@@ -200,7 +218,9 @@ async fn accept_connection(clients: Arc<Mutex<ClientRegistry>>, stream: TcpStrea
             .await;
     }
 
-    clients.lock().await.send_last_will(client).await;
+    let mut clients = clients.lock().await;
+    clients.send_last_will(client.clone()).await;
+    clients.remove_client(client);
 }
 
 async fn forward_messages_to_client(
