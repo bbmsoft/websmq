@@ -1,5 +1,5 @@
 [package]
-name = "websmq-server-rs"
+name = "websmq-rs"
 version = "0.1.0"
 authors = ["Michael Bachmann <mbachmann@bbmsoft.net>"]
 edition = "2018"
