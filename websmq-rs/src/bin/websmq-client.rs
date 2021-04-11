@@ -62,14 +62,14 @@ async fn receive_messages(mut rx: Receiver<Message>) {
     while let Some(msg) = rx.recv().await {
         match msg {
             Message::Publish(topic, payload) => {
-                println!("{}': {}", topic, decode_payload(&payload))
+                println!("{}: {}", topic, decode_payload(&payload))
             }
             Message::Subscribe(topic) => info!("Received 'Subscribe' message to topic '{}'", topic),
             Message::Unsubscribe(topic) => {
                 info!("Received 'Unsubscribe' message from topic '{}'", topic)
             }
             Message::LastWill(topic, payload) => {
-                println!("{}': {}", topic, decode_payload(&payload))
+                println!("{}: {}", topic, decode_payload(&payload))
             }
         }
     }
