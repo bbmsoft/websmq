@@ -1,8 +1,8 @@
-# WEBSMQ WebSocket MEssage Queue
+# WEBSMQ WebSocket Message Queue
 
 ## What is it?
 
-WEBSMQ is a very simple WebSocket based pub/sub message queue.
+WEBSMQ is a very easy to implement WebSocket based pub/sub message queue.
 
 ## Features
 
