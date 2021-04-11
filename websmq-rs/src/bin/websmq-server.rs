@@ -1,12 +1,13 @@
 use log::*;
 use std::{io::BufRead, thread};
 use tokio::sync::oneshot;
+use websmq_rs::start_server;
 
 #[tokio::main]
 async fn main() {
     env_logger::init();
 
-    if let Err(e) = websmq_server_rs::start_server("0.0.0.0:8080").await {
+    if let Err(e) = start_server("0.0.0.0:8080").await {
         error!("Error starting server: {}", e);
     }
 

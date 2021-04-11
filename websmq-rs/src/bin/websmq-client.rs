@@ -2,7 +2,7 @@ use log::*;
 use std::env;
 use std::{io::BufRead, thread};
 use tokio::sync::mpsc::{self, Receiver};
-use websmq_server_rs::{start_client, Message};
+use websmq_rs::{start_client, Message};
 
 #[tokio::main]
 async fn main() {
