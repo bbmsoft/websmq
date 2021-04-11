@@ -62,7 +62,6 @@ impl ClientRegistry {
                 // TODO
             }
             tungstenite::Message::Binary(data) => {
-                info!("Received binary message: {:?}", data);
                 self.process_binary_message(data, client).await;
             }
             tungstenite::Message::Ping(data) => {
@@ -74,7 +73,6 @@ impl ClientRegistry {
                 // TODO
             }
             tungstenite::Message::Close(reason) => {
-                info!("Received close message: {:?}", reason);
                 self.remove_client(client);
             }
         }
